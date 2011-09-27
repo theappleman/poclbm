@@ -157,31 +157,40 @@ class BitcoinMiner():
 				calculateF(state, work.merkle_end, work.time, work.difficulty, f, state2)
 				last_n_time = now
 
+	def get_binary(self, cache_name):
+		try:
+			binary = open(cache_name, 'rb')
+			contents = binary.read()
+			binary.close()
+		except IOError:
+			# This loads the kernel into the program without
+			# specifying the device.
+			# What are the side-effects?
+			self.miner = cl.Program(self.context, self.kernel).build(self.defines)
+			binary = self.miner.get_info(cl.program_info.BINARIES)[0]
+			if (self.defines.find('-DBITALIGN') != -1):
+				binary = patch(binary)
+			binaryW = open(cache_name, 'wb')
+			binaryW.write(binary)
+			binaryW.close()
+			contents = self.get_binary(cache_name)
+		return contents
+
 	def load_kernel(self):
 		self.context = cl.Context([self.device], None, None)
 		if (self.device.extensions.find('cl_amd_media_ops') != -1):
 			self.defines += ' -DBITALIGN'
 			self.defines += ' -DBFI_INT'
 
+		# We've just loaded the kernel code into memory.
+		# What are the benefits of making a binary cache?
 		kernel_file = open('phatk.cl', 'r')
-		kernel = kernel_file.read()
+		self.kernel = kernel_file.read()
 		kernel_file.close()
-		m = md5(); m.update(''.join([self.device.platform.name, self.device.platform.version, self.device.name, self.defines, kernel]))
+		m = md5(); m.update(''.join([self.device.platform.name, self.device.platform.version, self.device.name, self.defines, self.kernel]))
 		cache_name = '%s.elf' % m.hexdigest()
-		binary = None
-		try:
-			binary = open(cache_name, 'rb')
-			self.miner = cl.Program(self.context, [self.device], [binary.read()]).build(self.defines)
-		except (IOError, cl.LogicError):
-			self.miner = cl.Program(self.context, kernel).build(self.defines)
-			if (self.defines.find('-DBITALIGN') != -1):
-				patchedBinary = patch(self.miner.binaries[0])
-				self.miner = cl.Program(self.context, [self.device], [patchedBinary]).build(self.defines)
-			binaryW = open(cache_name, 'wb')
-			binaryW.write(self.miner.binaries[0])
-			binaryW.close()
-		finally:
-			if binary: binary.close()
+		binary = self.get_binary(cache_name)
+		self.miner = cl.Program(self.context, [self.device], [binary]).build(self.defines)
 
 		if (self.options.worksize == -1):
 			self.options.worksize = self.miner.search.get_work_group_info(cl.kernel_work_group_info.WORK_GROUP_SIZE, self.device)
