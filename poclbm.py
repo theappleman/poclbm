@@ -56,11 +56,14 @@ if options.platform == -1:
 	options.platform = 0
 
 devices = platforms[options.platform].get_devices()
-if (options.device == -1 or options.device >= len(devices)):
+if (options.device >= len(devices) or (options.device >= len(devices) and len(devices) > 1)):
 	print 'No device specified or device not found, use -d to specify one of the following\n'
 	for i in xrange(len(devices)):
 		print '[%d]\t%s' % (i, devices[i].name)
 	sys.exit()
+
+if options.device == -1:
+	options.device = 0
 
 miner = None
 try:
